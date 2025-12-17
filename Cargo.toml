@@ -2,6 +2,11 @@
 name = "order-book"
 version = "0.1.0"
 edition = "2021"
+description = "A price-priority order book implementation with support for market depth aggregation and thread-safe operations"
+license = "MIT"
+repository = "https://github.com/ghovax/order-book"
+documentation = "https://docs.rs/order-book"
+homepage = "https://github.com/ghovax/order-book"
 
 [dependencies]
 rust_decimal = "1.33"
