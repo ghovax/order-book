@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 /// ## Architecture
 ///
 /// This follows the Observer Pattern:
-/// 
+///
 /// - The `OrderBook` is the publisher (subject)
 /// - The `MarketDepthCache` is the subscriber (observer)
 /// - `OrderEvent` is the message passed between them
@@ -88,9 +88,7 @@ impl MarketDepthCache {
         };
 
         // Update the aggregated quantity at this level
-        *depth_write_lock
-            .entry(aggregated_price_level)
-            .or_insert(0) += event.quantity_delta;
+        *depth_write_lock.entry(aggregated_price_level).or_insert(0) += event.quantity_delta;
 
         // Lock is automatically released here
     }
@@ -163,7 +161,11 @@ impl MarketDepthCache {
     /// let quantity = cache.get_quantity_at_level(Decimal::new(100, 0), Side::Bid);
     /// assert_eq!(quantity, 100);
     /// ```
-    pub fn get_quantity_at_level(&self, aggregated_level: rust_decimal::Decimal, side: Side) -> u64 {
+    pub fn get_quantity_at_level(
+        &self,
+        aggregated_level: rust_decimal::Decimal,
+        side: Side,
+    ) -> u64 {
         let depth_read_lock = match side {
             Side::Bid => self.aggregated_bid_depth.read(),
             Side::Ask => self.aggregated_ask_depth.read(),

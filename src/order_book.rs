@@ -1,11 +1,11 @@
-use crate::types::{Order, OrderEvent, PriceLevelMap, Side};
+use crate::types::{Order, OrderEvent, ExactPriceLevelMap, Side};
 use rust_decimal::Decimal;
 use std::collections::BTreeMap;
 
 /// The core order book structure that maintains price-time priority.
 ///
 /// This structure is responsible only for:
-/// 
+///
 /// - Storing orders at each price level
 /// - Maintaining price priority (best bid/ask)
 /// - Publishing events when orders are inserted
@@ -13,16 +13,16 @@ use std::collections::BTreeMap;
 /// It does not maintain aggregated market depth, as that is handled by the external
 /// `MarketDepthCache` service to minimize lock contention.
 ///
-/// ### Thread Safety
+/// ## Thread Safety
 ///
 /// This structure is designed to be wrapped in a `RwLock` for concurrent access.
 /// The write lock should be held only briefly during order insertion.
 #[derive(Debug)]
 pub struct OrderBook {
     /// Ask side (sell orders): sorted by ascending price (lowest ask first)
-    asks: PriceLevelMap,
+    asks: ExactPriceLevelMap,
     /// Bid side (buy orders): sorted by descending price (highest bid first)
-    bids: PriceLevelMap,
+    bids: ExactPriceLevelMap,
 }
 
 impl OrderBook {
@@ -100,34 +100,30 @@ impl OrderBook {
     /// assert_eq!(event.quantity_delta, 100);
     /// ```
     pub fn insert_order(&mut self, order: Order) -> OrderEvent {
-        let order_price = order.price;
-        let order_quantity = order.quantity;
-        let order_side = order.side;
-
         // Select the appropriate price level map based on side
-        let price_level_map = match order_side {
+        let price_level_map = match order.side {
             Side::Bid => &mut self.bids,
             Side::Ask => &mut self.asks,
         };
 
         // Insert the order at its price level, maintaining time priority
         price_level_map
-            .entry(order_price)
+            .entry(order.price)
             .or_insert_with(Vec::new)
-            .push(order);
+            .push(order.clone());
 
         // Publish the event for downstream consumers
         OrderEvent {
-            price: order_price,
-            quantity_delta: order_quantity,
-            side: order_side,
+            price: order.price,
+            quantity_delta: order.quantity,
+            side: order.side,
         }
     }
 
     /// Computes the current best bid and best ask prices.
     ///
     /// This operation acquires a read lock and is O(1) due to the BTreeMap structure:
-    /// 
+    ///
     /// - Best bid is the highest price in the bid map (last key)
     /// - Best ask is the lowest price in the ask map (first key)
     ///
@@ -145,18 +141,19 @@ impl OrderBook {
     /// let mut order_book = OrderBook::new();
     /// order_book.insert_order(Order::new(100.50, 100, Side::Bid));
     ///
-    /// let (best_bid, best_ask) = order_book.compute_spread();
+    /// let (best_bid, best_ask, spread) = order_book.compute_spread();
     /// assert_eq!(best_bid, Some(Decimal::new(10050, 2)));
     /// assert_eq!(best_ask, None);
     /// ```
-    pub fn compute_spread(&self) -> (Option<Decimal>, Option<Decimal>) {
+    pub fn compute_spread(&self) -> (Option<Decimal>, Option<Decimal>, Option<Decimal>) {
         // BTreeMap maintains sorted order:
-        // - For bids: higher prices come last (use next_back to get highest)
-        // - For asks: lower prices come first (use next to get lowest)
+        // - For bids: higher prices come last (use `next_back` to get highest)
+        // - For asks: lower prices come first (use `next` to get lowest)
         let best_bid = self.bids.keys().next_back().copied();
         let best_ask = self.asks.keys().next().copied();
+        let spread = best_bid.and_then(|b| best_ask.map(|a| a - b));
 
-        (best_bid, best_ask)
+        (best_bid, best_ask, spread)
     }
 
     /// Returns the number of distinct price levels on the bid side.
@@ -187,7 +184,7 @@ impl OrderBook {
     /// ## Returns
     ///
     /// The number of orders at that price level, or 0 if no orders exist
-    pub fn orders_at_price_level(&self, price: Decimal, side: Side) -> usize {
+    pub fn orders_at_exact_price_level(&self, price: Decimal, side: Side) -> usize {
         let price_level_map = match side {
             Side::Bid => &self.bids,
             Side::Ask => &self.asks,

@@ -1,4 +1,4 @@
-//! A high-performance tested and benchmarked price-priority order-book implementation 
+//! A high-performance tested and benchmarked price-priority order-book implementation
 //! using an external cache to minimize lock contention and maximize concurrency.
 //!
 //! ## Architecture
@@ -36,7 +36,7 @@
 //! market_depth_cache.process_order_event(event);
 //!
 //! // 3. Query spread (read lock on order book)
-//! let (best_bid, best_ask) = order_book.read().compute_spread();
+//! let (best_bid, best_ask, spread) = order_book.read().compute_spread();
 //!
 //! // 4. Query market depth (read lock on cache)
 //! let (bid_depth, ask_depth) = market_depth_cache.get_aggregated_market_depth();
@@ -44,22 +44,22 @@
 //!
 //! The order-book and the cache use separate locks, which means that multiple
 //! readers can access the book and cache simultaneously without blocking each other.
-//! 
+//!
 //! Also, on the performance side, order insertions only hold the lock for a brief period,
 //! that is a $O(\log{N})$, because we're relying on the `BTreeMap`'s efficient insertions.
-//! 
+//!
 //! Lastly, the cache is updated asynchronously, which means that it does not block the order book.
 //! This allows for high concurrency and responsiveness in the order book.
 
-mod types;
-mod order_book;
 mod market_depth_cache;
+mod order_book;
+mod types;
 
 // Re-export public API
-pub use types::{Side, Order, OrderEvent, PriceLevelMap, AggregatedDepthMap};
-pub use order_book::OrderBook;
 pub use market_depth_cache::MarketDepthCache;
+pub use order_book::OrderBook;
+pub use types::{AggregatedDepthMap, Order, OrderEvent, ExactPriceLevelMap, Side};
 
 // Re-export commonly used external dependencies
-pub use rust_decimal::Decimal;
 pub use parking_lot::RwLock;
+pub use rust_decimal::Decimal;

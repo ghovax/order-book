@@ -55,10 +55,10 @@ pub struct OrderEvent {
 ///
 /// Maps each price (`Decimal`) to a list of orders at that price.
 /// Orders within a price level maintain time priority (FIFO).
-pub type PriceLevelMap = BTreeMap<Decimal, Vec<Order>>;
+pub type ExactPriceLevelMap = BTreeMap<Decimal, Vec<Order>>;
 
 /// Type alias for aggregated market depth cache.
 ///
-/// Maps each aggregated price level (Decimal) to the total quantity (`u64`)
+/// Maps each aggregated price level (`Decimal`) to the total quantity (`u64`)
 /// available at that level across all individual orders.
 pub type AggregatedDepthMap = BTreeMap<Decimal, u64>;

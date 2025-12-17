@@ -46,10 +46,12 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Purpose**: Measures the raw performance of inserting orders into the core order book without cache updates.
 
 **Operations Measured**:
+
 - `insert_single_bid_order`: Inserting buy orders
 - `insert_single_ask_order`: Inserting sell orders
 
 **What This Tests**:
+
 - BTreeMap insertion performance (O(log N))
 - Lock acquisition overhead
 - Memory allocation for new price levels
@@ -63,9 +65,11 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Purpose**: Measures the complete order insertion pipeline including cache updates.
 
 **Operations Measured**:
+
 - `insert_and_update_cache`: Full workflow of insert → event generation → cache update
 
 **What This Tests**:
+
 - End-to-end latency for the complete order processing pipeline
 - Combined overhead of book insertion + cache aggregation
 
@@ -80,6 +84,7 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Test Sizes**: 100, 1,000, 10,000, 100,000 orders
 
 **What This Tests**:
+
 - O(1) access time for best bid/ask (BTreeMap first/last key)
 - Whether performance degrades with larger order books (it shouldn't)
 
@@ -94,6 +99,7 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Test Sizes**: 100, 1,000, 10,000, 100,000 aggregated levels
 
 **What This Tests**:
+
 - BTreeMap cloning performance (O(N))
 - Read lock acquisition
 - Memory allocation for the snapshot
@@ -109,6 +115,7 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Thread Counts**: 1, 2, 4, 8 concurrent readers
 
 **What This Tests**:
+
 - RwLock read concurrency (readers should not block each other)
 - Cache line contention
 - Scalability with multiple CPU cores
@@ -124,6 +131,7 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Thread Counts**: 1, 2, 4, 8 concurrent readers
 
 **What This Tests**:
+
 - Cache RwLock read concurrency
 - Memory bandwidth for cloning depth maps
 - Independence of book and cache locks
@@ -137,15 +145,18 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Purpose**: Simulates realistic trading scenarios with both readers and writers.
 
 **Scenarios**:
+
 - `write_heavy_workload_90_10`: 90% writes, 10% reads (order entry heavy)
 - `read_heavy_workload_10_90`: 10% writes, 90% reads (market data query heavy)
 
 **What This Tests**:
+
 - Lock contention under realistic conditions
 - Write/read balance impact on throughput
 - Whether the external cache pattern reduces contention
 
 **Expected Performance**:
+
 - Write-heavy: Should handle high order insertion rates
 - Read-heavy: Should demonstrate excellent read scalability due to separate locks
 
@@ -158,6 +169,7 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 **Event Counts**: 100, 1,000, 10,000 events
 
 **What This Tests**:
+
 - End-to-end system throughput
 - Combined book + cache performance
 - Aggregation logic efficiency
@@ -168,15 +180,16 @@ Open `target/criterion/report/index.html` in a browser to view interactive perfo
 
 ## Performance Characteristics Summary
 
-| Operation | Time Complexity | Expected Latency |
-|-----------|----------------|------------------|
-| Order Insertion | O(log N) | < 1 µs |
-| Cache Update | O(log M) | < 1 µs |
-| Spread Computation | O(1) | < 100 ns |
-| Depth Retrieval | O(M) | < 10 µs (small M) |
-| Concurrent Reads | O(1) per thread | Scales linearly |
+| Operation          | Time Complexity | Expected Latency  |
+| ------------------ | --------------- | ----------------- |
+| Order Insertion    | O(log N)        | < 1 µs            |
+| Cache Update       | O(log M)        | < 1 µs            |
+| Spread Computation | O(1)            | < 100 ns          |
+| Depth Retrieval    | O(M)            | < 10 µs (small M) |
+| Concurrent Reads   | O(1) per thread | Scales linearly   |
 
 Where:
+
 - N = number of distinct price levels in the order book
 - M = number of aggregated price levels in the cache
 
@@ -201,6 +214,7 @@ When analyzing benchmark results, look for:
 ## Comparison with Alternative Architectures
 
 The external cache pattern should show:
+
 - **Better read scalability** compared to a single-lock design
 - **Lower write latency** compared to inline cache updates
 - **Higher throughput** in mixed workloads compared to synchronized designs
@@ -219,6 +233,7 @@ Potential additions to the benchmark suite:
 ## Hardware Considerations
 
 Benchmark results will vary based on:
+
 - CPU core count (affects concurrency benchmarks)
 - CPU cache size (affects large book benchmarks)
 - Memory bandwidth (affects depth retrieval)

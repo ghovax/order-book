@@ -1,4 +1,4 @@
-use order_book::{Order, OrderBook, MarketDepthCache, Side, Decimal};
+use order_book::{Decimal, MarketDepthCache, Order, OrderBook, Side};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -12,55 +12,58 @@ fn test_order_insertion_and_spread_computation() {
     let order = Order::new(99.50, 10, Side::Bid);
     let event = order_book.insert_order(order);
     market_depth_cache.process_order_event(event);
-    let (best_bid, best_ask) = order_book.compute_spread();
+    let (best_bid, best_ask, _) = order_book.compute_spread();
     assert_eq!(
         best_bid,
         Some(Decimal::try_from(99.50).unwrap().normalize()),
-        "Best Bid should be 99.50"
+        "Best bid should be 99.50"
     );
-    assert!(best_ask.is_none(), "Ask should be None (no sell orders yet)");
+    assert!(
+        best_ask.is_none(),
+        "Ask should be `None` (no sell orders yet)"
+    );
 
-    // Test 2: Insert another Bid at a lower price
+    // Insert another Bid at a lower price
     let order = Order::new(99.00, 5, Side::Bid);
     let event = order_book.insert_order(order);
     market_depth_cache.process_order_event(event);
-    let (best_bid, _) = order_book.compute_spread();
+    let (best_bid, _, _) = order_book.compute_spread();
     assert_eq!(
         best_bid,
         Some(Decimal::try_from(99.50).unwrap().normalize()),
-        "Best Bid should still be 99.50 (price priority)"
+        "Best bid should still be 99.50 (price priority)"
     );
 
-    // Test 3: Insert an Ask (Sell) order
+    // Insert an ask (sell) order
     let order = Order::new(100.25, 20, Side::Ask);
     let event = order_book.insert_order(order);
     market_depth_cache.process_order_event(event);
-    let (best_bid, best_ask) = order_book.compute_spread();
+    let (best_bid, best_ask, _) = order_book.compute_spread();
     assert_eq!(
         best_bid,
         Some(Decimal::try_from(99.50).unwrap().normalize()),
-        "Best Bid should be 99.50"
+        "Best bid should be 99.50"
     );
     assert_eq!(
         best_ask,
         Some(Decimal::try_from(100.25).unwrap().normalize()),
-        "Best Ask should be 100.25"
+        "Best ask should be 100.25"
     );
 
-    // Test 4: Insert another Ask at a lower price (becomes new best ask)
+    // Insert another ask at a lower price (becomes new best ask)
     let order = Order::new(100.10, 30, Side::Ask);
     let event = order_book.insert_order(order);
     market_depth_cache.process_order_event(event);
-    let (_, best_ask) = order_book.compute_spread();
+    let (_, best_ask, _) = order_book.compute_spread();
     assert_eq!(
         best_ask,
         Some(Decimal::try_from(100.10).unwrap().normalize()),
-        "New Best Ask should be 100.10"
+        "New best ask should be 100.10"
     );
 
-    // Test 5: Verify time priority within a price level
+    // Verify time priority within a price level
     assert_eq!(
-        order_book.orders_at_price_level(Decimal::try_from(100.25).unwrap().normalize(), Side::Ask),
+        order_book.orders_at_exact_price_level(Decimal::try_from(100.25).unwrap().normalize(), Side::Ask),
         1,
         "Should have one order at 100.25"
     );
@@ -98,29 +101,39 @@ fn test_market_depth_aggregation_logic() {
 
     // Check Bid Depth
     assert_eq!(
-        *bid_depth.get(&Decimal::try_from(99.0).unwrap().normalize()).unwrap(),
+        *bid_depth
+            .get(&Decimal::try_from(99.0).unwrap().normalize())
+            .unwrap(),
         15,
         "Bid depth at 99.0 should be 15"
     );
     assert!(
-        bid_depth.get(&Decimal::try_from(100.0).unwrap().normalize()).is_none(),
+        bid_depth
+            .get(&Decimal::try_from(100.0).unwrap().normalize())
+            .is_none(),
         "No bids should be aggregated at level 100"
     );
 
     // Check Ask Depth
     assert_eq!(
-        *ask_depth.get(&Decimal::try_from(100.0).unwrap().normalize()).unwrap(),
+        *ask_depth
+            .get(&Decimal::try_from(100.0).unwrap().normalize())
+            .unwrap(),
         23,
         "Ask depth at 100.0 should be 23"
     );
     assert_eq!(
-        *ask_depth.get(&Decimal::try_from(101.0).unwrap().normalize()).unwrap(),
+        *ask_depth
+            .get(&Decimal::try_from(101.0).unwrap().normalize())
+            .unwrap(),
         50,
         "Ask depth at 101.0 should be 50"
     );
 
     // Ensure no other unexpected levels exist
-    assert!(bid_depth.get(&Decimal::try_from(98.0).unwrap().normalize()).is_none());
+    assert!(bid_depth
+        .get(&Decimal::try_from(98.0).unwrap().normalize())
+        .is_none());
 }
 
 #[test]
@@ -136,7 +149,7 @@ fn test_decimal_precision() {
         market_depth_cache.process_order_event(event);
     }
 
-    let (best_bid, _) = order_book.compute_spread();
+    let (best_bid, _, _) = order_book.compute_spread();
     // 100.01 is the highest price
     assert_eq!(
         best_bid,
@@ -150,12 +163,16 @@ fn test_decimal_precision() {
     // 99.99 aggregates to 99.0, with depth 3
 
     assert_eq!(
-        *bid_depth.get(&Decimal::try_from(100.0).unwrap().normalize()).unwrap(),
+        *bid_depth
+            .get(&Decimal::try_from(100.0).unwrap().normalize())
+            .unwrap(),
         3,
         "Bid depth at 100.0 should be 3 (100.00 + 100.01)"
     );
     assert_eq!(
-        *bid_depth.get(&Decimal::try_from(99.0).unwrap().normalize()).unwrap(),
+        *bid_depth
+            .get(&Decimal::try_from(99.0).unwrap().normalize())
+            .unwrap(),
         3,
         "Bid depth at 99.0 should be 3 (99.99)"
     );
@@ -216,7 +233,8 @@ fn test_concurrent_access_smoke_test() {
     let total_inserted_quantity = (orders_per_thread * number_of_threads) as u64;
     let (bid_depth, ask_depth) = market_depth_cache_arc.get_aggregated_market_depth();
 
-    let total_cached_quantity: u64 = bid_depth.values().sum::<u64>() + ask_depth.values().sum::<u64>();
+    let total_cached_quantity: u64 =
+        bid_depth.values().sum::<u64>() + ask_depth.values().sum::<u64>();
 
     // This validates that every order was processed by the cache correctly
     assert_eq!(
@@ -230,9 +248,15 @@ fn test_concurrent_access_smoke_test() {
 fn test_empty_order_book() {
     let order_book = OrderBook::new();
 
-    let (best_bid, best_ask) = order_book.compute_spread();
-    assert!(best_bid.is_none(), "Best bid should be `None` for empty book");
-    assert!(best_ask.is_none(), "Best ask should be `None` for empty book");
+    let (best_bid, best_ask, _) = order_book.compute_spread();
+    assert!(
+        best_bid.is_none(),
+        "Best bid should be `None` for empty book"
+    );
+    assert!(
+        best_ask.is_none(),
+        "Best ask should be `None` for empty book"
+    );
 
     assert_eq!(order_book.bid_levels_count(), 0);
     assert_eq!(order_book.ask_levels_count(), 0);
@@ -252,17 +276,20 @@ fn test_cache_level_queries() {
 
     // Test individual level queries
     assert_eq!(
-        market_depth_cache.get_quantity_at_level(Decimal::try_from(99.0).unwrap().normalize(), Side::Bid),
+        market_depth_cache
+            .get_quantity_at_level(Decimal::try_from(99.0).unwrap().normalize(), Side::Bid),
         10,
         "Bid quantity at level 99 should be 10"
     );
     assert_eq!(
-        market_depth_cache.get_quantity_at_level(Decimal::try_from(100.0).unwrap().normalize(), Side::Ask),
+        market_depth_cache
+            .get_quantity_at_level(Decimal::try_from(100.0).unwrap().normalize(), Side::Ask),
         20,
         "Ask quantity at level 100 should be 20"
     );
     assert_eq!(
-        market_depth_cache.get_quantity_at_level(Decimal::try_from(98.0).unwrap().normalize(), Side::Bid),
+        market_depth_cache
+            .get_quantity_at_level(Decimal::try_from(98.0).unwrap().normalize(), Side::Bid),
         0,
         "Non-existent level should return 0"
     );
@@ -283,14 +310,15 @@ fn test_multiple_orders_same_price_level() {
 
     // Verify the order book maintains all orders
     assert_eq!(
-        order_book.orders_at_price_level(Decimal::try_from(100.00).unwrap().normalize(), Side::Bid),
+        order_book.orders_at_exact_price_level(Decimal::try_from(100.00).unwrap().normalize(), Side::Bid),
         3,
         "Should have 3 orders at price level 100.00"
     );
 
     // Verify the cache aggregates correctly
     assert_eq!(
-        market_depth_cache.get_quantity_at_level(Decimal::try_from(100.0).unwrap().normalize(), Side::Bid),
+        market_depth_cache
+            .get_quantity_at_level(Decimal::try_from(100.0).unwrap().normalize(), Side::Bid),
         60,
         "Aggregated quantity should be 10 + 20 + 30 = 60"
     );
@@ -334,14 +362,18 @@ fn test_price_aggregation_boundary_cases() {
 
     // 99.00 and 99.99 should aggregate to 99
     assert_eq!(
-        *bid_depth.get(&Decimal::try_from(99.0).unwrap().normalize()).unwrap(),
+        *bid_depth
+            .get(&Decimal::try_from(99.0).unwrap().normalize())
+            .unwrap(),
         3,
         "Level 99 should have 1 + 2 = 3"
     );
 
     // 100.00 and 100.01 should aggregate to 100
     assert_eq!(
-        *bid_depth.get(&Decimal::try_from(100.0).unwrap().normalize()).unwrap(),
+        *bid_depth
+            .get(&Decimal::try_from(100.0).unwrap().normalize())
+            .unwrap(),
         7,
         "Level 100 should have 3 + 4 = 7"
     );
